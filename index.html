@@ -96,8 +96,6 @@
     </div>
 
     <script>
-        const mujObrazek = "vajicko.png";
-
         let eggPosition = 1; 
         let isShuffling = false;
         let canPick = false;
@@ -166,7 +164,7 @@
                 // Trefa
                 document.getElementById('egg-' + idx).style.display = 'block';
                 document.getElementById('status').innerText = "ANO! 🥚";
-                document.getElementById('gift-img').src = mujObrazek;
+                document.getElementById('gift-img').src = "vajicko.jpeg";
                 setTimeout(() => {
                     document.getElementById('win-screen').style.display = 'flex';
                 }, 1000);
