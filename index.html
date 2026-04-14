@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>🥚Vajíčko!🥚</title>
-    
+
     <!-- Nastavení pro iPhone aplikaci -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
     <!-- Opravená ikona pro plochu iPhonu (Zelená s vajíčkem) -->
     <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%234caf50'/%3E%3Ctext y='75' x='10' font-size='80'%3E🥚%3C/text%3E%3C/svg%3E">
-    
+
     <!-- Ikona pro prohlížeč -->
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='80' font-size='80'%3E🥚%3C/text%3E%3C/svg%3E">
 
@@ -19,11 +19,12 @@
         body {
             margin: 0; padding: 0;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
-            height: 100vh; background: #4caf50; 
+            height: 100vh; background: #4caf50;
             font-family: 'Segoe UI', Tahoma, sans-serif; overflow: hidden; touch-action: manipulation;
         }
 
         h1 { color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); margin-bottom: 5px; font-size: 24px; text-align: center; }
+
         #status { color: #f1f8e9; margin-bottom: 30px; font-weight: bold; height: 24px; text-align: center; font-size: 18px; }
 
         .game-container {
@@ -57,6 +58,13 @@
             flex-direction: column; align-items: center; justify-content: center; text-align: center;
         }
 
+        #win-screen h1 { color: #4caf50; }
+
+        #win-screen p {
+            font-size: 20px; font-weight: bold; color: #333;
+            padding: 0 20px; text-align: center;
+        }
+
         #gift-img {
             width: 85%; max-width: 320px; border-radius: 20px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.3); margin: 20px 0;
@@ -69,123 +77,160 @@
     <h1>Kde se schovalo vajíčko? 🥚</h1>
     <div id="status">Klepni na Start!</div>
 
-    <div class="game-container">
-        <div class="bunny-wrapper" id="bunny-0" style="left: 5%;" onclick="selectBunny(0)">
-            <div class="bunny" id="visual-0">🐰</div>
-            <div class="egg-hidden" id="egg-0">🥚</div>
-        </div>
-        <div class="bunny-wrapper" id="bunny-1" style="left: 37%;" onclick="selectBunny(1)">
-            <div class="bunny" id="visual-1">🐰</div>
-            <div class="egg-hidden" id="egg-1">🥚</div>
-        </div>
-        <div class="bunny-wrapper" id="bunny-2" style="left: 69%;" onclick="selectBunny(2)">
-            <div class="bunny" id="visual-2">🐰</div>
-            <div class="egg-hidden" id="egg-2">🥚</div>
-        </div>
-    </div>
+    <div class="game-container" id="game-container"></div>
 
-    <button class="btn" id="start-btn" onclick="startGame()">Start!</button>
+    <button class="btn" id="start-btn">Start!</button>
 
     <div id="win-screen">
-        <h1 style="color: #4caf50;">MÁŠ HO! 🥚</h1>
+        <h1>MÁŠ HO! 🥚</h1>
         <img id="gift-img" src="" alt="Dárek">
-        <p style="font-size: 20px; font-weight: bold; color: #333; padding: 0 20px; text-align: center;">
-            Tady je vajíčko co navibecodilo tvoje AI Jajíčko ❣️
-        </p>
-        <button class="btn" onclick="window.location.reload()">Hrát znovu</button>
+        <p>Tady je vajíčko co navibecodilo tvoje AI Jajíčko ❣️</p>
+        <button class="btn" id="replay-btn">Hrát znovu</button>
     </div>
 
     <script>
-        let eggPosition = 1; 
-        let isShuffling = false;
-        let canPick = false;
-        const positions = ["5%", "37%", "69%"];
-        let currentMapping = [0, 1, 2];
+        // --- Konštanty ---
+        const BUNNY_COUNT = 3;
+        const POSITIONS = ["5%", "37%", "69%"];
+        const SHUFFLE_COUNT = 10;
+        const SHUFFLE_INTERVAL_MS = 450;
+        const SHOW_EGG_MS = 1200;
+        const HIDE_EGG_MS = 500;
+        const WIN_DELAY_MS = 1000;
+        const WRONG_REVEAL_MS = 500;
+        const WRONG_RESTART_MS = 1500;
 
+        // --- Stav hry ---
+        let eggPosition = 1;
+        let gameState = "idle"; // "idle" | "showing" | "shuffling" | "picking"
+        let currentMapping = Array.from({ length: BUNNY_COUNT }, (_, i) => i);
+
+        // --- Cache DOM elementov ---
+        const dom = {
+            status: document.getElementById("status"),
+            startBtn: document.getElementById("start-btn"),
+            winScreen: document.getElementById("win-screen"),
+            giftImg: document.getElementById("gift-img"),
+            replayBtn: document.getElementById("replay-btn"),
+            container: document.getElementById("game-container"),
+            bunnies: [],   // { wrapper, visual, egg }
+        };
+
+        // --- Generovanie zajačikov ---
+        for (let i = 0; i < BUNNY_COUNT; i++) {
+            const wrapper = document.createElement("div");
+            wrapper.className = "bunny-wrapper";
+            wrapper.id = "bunny-" + i;
+            wrapper.style.left = POSITIONS[i];
+            wrapper.addEventListener("click", () => selectBunny(i));
+
+            const visual = document.createElement("div");
+            visual.className = "bunny";
+            visual.textContent = "🐰";
+
+            const egg = document.createElement("div");
+            egg.className = "egg-hidden";
+            egg.textContent = "🥚";
+
+            wrapper.appendChild(visual);
+            wrapper.appendChild(egg);
+            dom.container.appendChild(wrapper);
+
+            dom.bunnies.push({ wrapper, visual, egg });
+        }
+
+        // --- Event listenery ---
+        dom.startBtn.addEventListener("click", startGame);
+        dom.replayBtn.addEventListener("click", () => window.location.reload());
+
+        // --- Fisher-Yates shuffle (korektný, bez zaujatosti) ---
+        function shuffleArray(arr) {
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+        }
+
+        // --- Herná logika ---
         function startGame() {
-            document.getElementById('start-btn').style.display = 'none';
-            document.getElementById('status').innerText = "Sleduj vajíčko...";
-            
-            eggPosition = Math.floor(Math.random() * 3);
-            
+            dom.startBtn.style.display = "none";
+            dom.status.innerText = "Sleduj vajíčko...";
+            gameState = "showing";
+
+            eggPosition = Math.floor(Math.random() * BUNNY_COUNT);
+
             // Schovat vajíčka u všech
-            for(let i=0; i<3; i++) {
-                document.getElementById('egg-'+i).style.display = 'none';
-                document.getElementById('visual-'+i).classList.remove('jump');
+            for (const b of dom.bunnies) {
+                b.egg.style.display = "none";
+                b.visual.classList.remove("jump");
             }
 
-            const targetEgg = document.getElementById('egg-' + eggPosition);
-            const targetBunny = document.getElementById('visual-' + eggPosition);
-            
+            const target = dom.bunnies[eggPosition];
+
             // Ukázka vajíčka
-            targetBunny.classList.add('jump');
-            targetEgg.style.display = 'block';
-            
+            target.visual.classList.add("jump");
+            target.egg.style.display = "block";
+
             setTimeout(() => {
-                targetBunny.classList.remove('jump');
+                target.visual.classList.remove("jump");
                 setTimeout(() => {
-                    targetEgg.style.display = 'none';
+                    target.egg.style.display = "none";
                     startShuffle();
-                }, 500);
-            }, 1200);
+                }, HIDE_EGG_MS);
+            }, SHOW_EGG_MS);
         }
 
         function startShuffle() {
-            isShuffling = true;
-            canPick = false;
-            document.getElementById('status').innerText = "Míchám...";
+            gameState = "shuffling";
+            dom.status.innerText = "Míchám...";
             let count = 0;
-            const maxShuffles = 10;
 
             const interval = setInterval(() => {
-                currentMapping.sort(() => Math.random() - 0.5);
+                shuffleArray(currentMapping);
                 currentMapping.forEach((idx, pos) => {
-                    document.getElementById('bunny-' + idx).style.left = positions[pos];
+                    dom.bunnies[idx].wrapper.style.left = POSITIONS[pos];
                 });
 
                 count++;
-                if (count >= maxShuffles) {
+                if (count >= SHUFFLE_COUNT) {
                     clearInterval(interval);
-                    isShuffling = false;
-                    canPick = true;
-                    document.getElementById('status').innerText = "Kde je?";
+                    gameState = "picking";
+                    dom.status.innerText = "Kde je?";
                 }
-            }, 450);
+            }, SHUFFLE_INTERVAL_MS);
         }
 
         function selectBunny(idx) {
-            if (!canPick || isShuffling) return;
-            canPick = false;
-            
-            const visual = document.getElementById('visual-' + idx);
-            visual.classList.add('jump');
+            if (gameState !== "picking") return;
+            gameState = "idle";
+
+            const selected = dom.bunnies[idx];
+            selected.visual.classList.add("jump");
 
             if (idx === eggPosition) {
                 // Trefa
-                document.getElementById('egg-' + idx).style.display = 'block';
-                document.getElementById('status').innerText = "ANO! 🥚";
-                document.getElementById('gift-img').src = "vajicko.jpeg";
+                selected.egg.style.display = "block";
+                dom.status.innerText = "ANO! 🥚";
+                dom.giftImg.src = "vajicko.jpeg";
                 setTimeout(() => {
-                    document.getElementById('win-screen').style.display = 'flex';
-                }, 1000);
+                    dom.winScreen.style.display = "flex";
+                }, WIN_DELAY_MS);
             } else {
                 // Chyba
-                document.getElementById('status').innerText = "Vedle! Bylo tady...";
-                const correctVisual = document.getElementById('visual-' + eggPosition);
-                const correctEgg = document.getElementById('egg-' + eggPosition);
-                
+                dom.status.innerText = "Vedle! Bylo tady...";
+                const correct = dom.bunnies[eggPosition];
+
                 setTimeout(() => {
-                    correctVisual.classList.add('jump');
-                    correctEgg.style.display = 'block';
-                    
-                    // Místo reloadu jen schováme a mícháme znovu
+                    correct.visual.classList.add("jump");
+                    correct.egg.style.display = "block";
+
                     setTimeout(() => {
-                        visual.classList.remove('jump');
-                        correctVisual.classList.remove('jump');
-                        correctEgg.style.display = 'none';
-                        startGame(); // Automaticky začne znovu
-                    }, 1500);
-                }, 500);
+                        selected.visual.classList.remove("jump");
+                        correct.visual.classList.remove("jump");
+                        correct.egg.style.display = "none";
+                        startGame();
+                    }, WRONG_RESTART_MS);
+                }, WRONG_REVEAL_MS);
             }
         }
     </script>
